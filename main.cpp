@@ -22,6 +22,9 @@
 // Solution by Yury Tikhoglaz
 
 #include <iostream>
+#include <fstream>
+
+using namespace std;
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -39,30 +42,59 @@
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-// STAGE 0 - READ INPUT FILE AND SPLIT TO THE CHUNKS
+uint32_t splitFile();
+
+// STAGE 0 - CHECK INPUT FILE
 void stage0(){
-    std::cout << "STAGE 0 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << std::endl;
-    std::cout << std::endl;
+    cout << "STAGE 0 - CHECK INPUT FILE" << endl;
+    cout << endl;
 }
 
-// STAGE 1 - MERGE CHUNKS
+// STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS
 void stage1(){
-    std::cout << "STAGE 1 - MERGE CHUNKS" << std::endl;
-    std::cout << std::endl;
+    cout << "STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
+    cout << endl;
+
+    uint32_t n = splitFile();
+
+    cout << "\tRead " << n << " numbers" << endl;
+    cout << std::endl;
+}
+
+uint32_t splitFile() {
+    uint32_t n = 0, numb;
+
+    FILE *inputFile = fopen(INPUT_FILE, "rb");
+    while(fread(&numb, sizeof(uint32_t), 1, inputFile)) {
+        n++;
+    }
+    fclose(inputFile);
+
+    return n;
+}
+
+// STAGE 2 - MERGE CHUNKS
+void stage2(){
+    cout << "STAGE 2 - MERGE CHUNKS" << endl;
+    cout << endl;
+
+
 }
 
 int main() {
-    std::cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << std::endl;
-    std::cout << std::endl;
-    std::cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << std::endl;
-    std::cout << "\tKernels limit \t\t- " << KERNELS_NUM << std::endl;
-    std::cout << "\tInput file name \t- " << INPUT_FILE << std::endl;
-    std::cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << std::endl;
-    std::cout << std::endl;
+    cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << endl;
+    cout << endl;
+    cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << endl;
+    cout << "\tKernels limit \t\t- " << KERNELS_NUM << endl;
+    cout << "\tInput file name \t- " << INPUT_FILE << endl;
+    cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << endl;
+    cout << std::endl;
 
     stage0();
 
     stage1();
+
+    stage2();
 
     return 0;
 }
