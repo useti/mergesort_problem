@@ -23,6 +23,8 @@
 
 #include <iostream>
 #include <fstream>
+#include <vector>
+#include <algorithm>
 
 using namespace std;
 
@@ -30,6 +32,8 @@ using namespace std;
 
 // Memory size
 #define MEMORY_SIZE_AVAILABLE 131072
+
+#define ELEMENTS_PER_CHUNK 32000
 
 // Number of kernels
 #define KERNELS_NUM 2
@@ -43,6 +47,10 @@ using namespace std;
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 uint32_t splitFile();
+
+void initialInfo();
+
+void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk);
 
 // STAGE 0 - CHECK INPUT FILE
 void stage0(){
@@ -62,15 +70,44 @@ void stage1(){
 }
 
 uint32_t splitFile() {
-    uint32_t n = 0, numb;
+
+    uint32_t totalElements = 0, chunkElement = 0, chunk = 0, numb;
+    vector<uint32_t> currentChunk;
 
     FILE *inputFile = fopen(INPUT_FILE, "rb");
     while(fread(&numb, sizeof(uint32_t), 1, inputFile)) {
-        n++;
+
+        currentChunk.push_back(numb);
+
+        totalElements++;
+        chunkElement++;
+        if(chunkElement >= ELEMENTS_PER_CHUNK){
+            chunkElement = 0;
+
+            saveChunk(chunk, currentChunk);
+
+            currentChunk.clear();
+            currentChunk.shrink_to_fit();
+
+            chunk++;
+        }
+
     }
+
+    if(currentChunk.size() > 0)
+        saveChunk(chunk, currentChunk);
+
     fclose(inputFile);
 
-    return n;
+    return totalElements;
+}
+
+void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk) {
+    sort(currentChunk.begin(), currentChunk.end());
+
+    // TODO: add saving here
+
+    cout << "\t\tChunk " << chunk << " saved (" << currentChunk.size() << " elements)" << endl;
 }
 
 // STAGE 2 - MERGE CHUNKS
@@ -84,11 +121,8 @@ void stage2(){
 int main() {
     cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << endl;
     cout << endl;
-    cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << endl;
-    cout << "\tKernels limit \t\t- " << KERNELS_NUM << endl;
-    cout << "\tInput file name \t- " << INPUT_FILE << endl;
-    cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << endl;
-    cout << std::endl;
+
+    initialInfo();
 
     stage0();
 
@@ -97,4 +131,13 @@ int main() {
     stage2();
 
     return 0;
+}
+
+void initialInfo() {
+    cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << " Bytes" << endl;
+    cout << "\tElements per chunk \t- " << ELEMENTS_PER_CHUNK << endl;
+    cout << "\tKernels limit \t\t- " << KERNELS_NUM << endl;
+    cout << "\tInput file name \t- " << INPUT_FILE << endl;
+    cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << endl;
+    cout << endl;
 }
