@@ -30,10 +30,14 @@ using namespace std;
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+// Log data
+#define LOGDATA
+
 // Memory size
 #define MEMORY_SIZE_AVAILABLE 131072
 
 #define ELEMENTS_PER_CHUNK 32000
+//#define ELEMENTS_PER_CHUNK 16000
 
 // Number of kernels
 #define KERNELS_NUM 2
@@ -52,22 +56,15 @@ void initialInfo();
 
 void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk);
 
-// STAGE 0 - CHECK INPUT FILE
-void stage0(){
-    cout << "STAGE 0 - CHECK INPUT FILE" << endl;
-    cout << endl;
-}
+void stage2();
 
-// STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS
-void stage1(){
-    cout << "STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
-    cout << endl;
+void stage1();
 
-    uint32_t n = splitFile();
+void stage0();
 
-    cout << "\tRead " << n << " numbers" << endl;
-    cout << std::endl;
-}
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// FUNCTIONS
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 uint32_t splitFile() {
 
@@ -94,7 +91,7 @@ uint32_t splitFile() {
 
     }
 
-    if(currentChunk.size() > 0)
+    if(!currentChunk.empty())
         saveChunk(chunk, currentChunk);
 
     fclose(inputFile);
@@ -107,22 +104,64 @@ void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk) {
 
     // TODO: add saving here
 
+#ifdef LOGDATA
     cout << "\t\tChunk " << chunk << " saved (" << currentChunk.size() << " elements)" << endl;
+#endif
+}
+
+void initialInfo() {
+    cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << endl;
+    cout << endl;
+    cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << " Bytes" << endl;
+    cout << "\tElements per chunk \t- " << ELEMENTS_PER_CHUNK << endl;
+    cout << "\tKernels limit \t\t- " << KERNELS_NUM << endl;
+    cout << "\tInput file name \t- " << INPUT_FILE << endl;
+    cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << endl;
+    cout << endl;
+}
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// STAGES
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+// STAGE 0 - CHECK INPUT FILE
+void stage0(){
+#ifdef LOGDATA
+    cout << "STAGE 0 - CHECK INPUT FILE" << endl;
+    cout << endl;
+#endif
+}
+
+// STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS
+void stage1(){
+#ifdef LOGDATA
+    cout << "STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
+    cout << endl;
+#endif
+
+    uint32_t n = splitFile();
+
+#ifdef LOGDATA
+    cout << "\tRead " << n << " numbers" << endl;
+    cout << std::endl;
+#endif
 }
 
 // STAGE 2 - MERGE CHUNKS
 void stage2(){
+#ifdef LOGDATA
     cout << "STAGE 2 - MERGE CHUNKS" << endl;
     cout << endl;
-
-
+#endif
 }
 
-int main() {
-    cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << endl;
-    cout << endl;
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+int main() {
+
+#ifdef LOGDATA
     initialInfo();
+#endif
 
     stage0();
 
@@ -131,13 +170,4 @@ int main() {
     stage2();
 
     return 0;
-}
-
-void initialInfo() {
-    cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << " Bytes" << endl;
-    cout << "\tElements per chunk \t- " << ELEMENTS_PER_CHUNK << endl;
-    cout << "\tKernels limit \t\t- " << KERNELS_NUM << endl;
-    cout << "\tInput file name \t- " << INPUT_FILE << endl;
-    cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << endl;
-    cout << endl;
 }
