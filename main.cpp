@@ -26,6 +26,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include "MergeWorker.h"
 
 using namespace std;
 
@@ -56,8 +57,6 @@ uint32_t splitFile();
 void initialInfo();
 
 void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level = 0);
-
-void stage2();
 
 void stage1();
 
@@ -138,16 +137,9 @@ void initialInfo() {
 // STAGES
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-// STAGE 0 - CHECK INPUT FILE
-void stage0(){
-#ifdef LOGDATA
-    cout << "STAGE 0 - CHECK INPUT FILE" << endl;
-    cout << endl;
-#endif
-}
 
 // STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS
-void stage1(){
+void stage0(){
 #ifdef LOGDATA
     cout << "STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
     cout << endl;
@@ -162,11 +154,12 @@ void stage1(){
 }
 
 // STAGE 2 - MERGE CHUNKS
-void stage2(){
+void stage1(){
 #ifdef LOGDATA
     cout << "STAGE 2 - MERGE CHUNKS" << endl;
     cout << endl;
 #endif
+
 }
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -179,9 +172,9 @@ int main() {
 
     stage0();
 
-    stage1();
+    stage0();
 
-    stage2();
+    stage1();
 
     return 0;
 }
