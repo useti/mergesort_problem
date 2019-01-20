@@ -12,6 +12,13 @@ public:
     MergeWorker(uint32_t start, uint32_t stop, uint32_t level);
 
     MergeWorker();
+
+    uint32_t doWork();
+
+private:
+    uint32_t _start;
+    uint32_t _stop;
+    uint32_t _level;
 };
 
 

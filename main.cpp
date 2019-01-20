@@ -44,6 +44,9 @@ using namespace std;
 // Number of kernels
 #define KERNELS_NUM 2
 
+// Number of workers
+#define WORKERS_NUM 4
+
 // Input file name
 #define INPUT_FILE "input"
 
@@ -51,6 +54,10 @@ using namespace std;
 #define OUTPUT_FILE_NAME "output"
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+uint32_t _levelOne = 0;
+
+uint32_t _numberOfChunks = 0;
 
 uint32_t splitFile();
 
@@ -100,6 +107,8 @@ uint32_t splitFile() {
 
     fclose(inputFile);
 
+    _numberOfChunks = chunk;
+
     return totalElements;
 }
 
@@ -145,10 +154,10 @@ void stage0(){
     cout << endl;
 #endif
 
-    uint32_t n = splitFile();
+    _levelOne = splitFile();
 
 #ifdef LOGDATA
-    cout << "\tRead " << n << " numbers" << endl;
+    cout << "\tRead " << _levelOne << " numbers" << endl;
     cout << std::endl;
 #endif
 }
@@ -160,6 +169,100 @@ void stage1(){
     cout << endl;
 #endif
 
+    uint32_t level = 0;
+
+    bool exitCondition = false;
+
+    while (!exitCondition)
+    {
+
+        uint32_t element = 0;
+        for (int i = 0; i <= _numberOfChunks; i+= WORKERS_NUM * 2) {
+            for (int j = 0; j < WORKERS_NUM; ++j) {
+                std::ostringstream inFileName1;
+                std::ostringstream inFileName2;
+                std::ostringstream outFileName;
+
+                inFileName1 << "chnk" <<i + j*2     << "lvl" << level;
+                inFileName2 << "chnk" <<i + j*2 + 1 << "lvl" << level;
+                outFileName << "chnk" << element + 1 << "lvl" << level + 1;
+
+
+                // check if input chunks exists
+
+                ifstream input1(inFileName1.str().c_str());
+                ifstream input2(inFileName2.str().c_str());
+
+                if (input1 && input2){
+                    // both files exist - merging
+
+#ifdef LOGDATA
+                    cout << "\t\tMerging chunk " << inFileName1.str() << " with chunk " << inFileName2.str() << endl;
+#endif
+
+                    FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+                    fclose(outputFile);
+
+#ifdef LOGDATA
+                    cout << "\t\tRemoving chunk " << inFileName1.str() << endl;
+#endif
+                    remove(inFileName1.str().c_str());
+
+#ifdef LOGDATA
+                    cout << "\t\tRemoving chunk " << inFileName2.str() << endl;
+#endif
+                    remove(inFileName2.str().c_str());
+                    element++;
+                } else{
+                    if(input1){
+                        // file 1 exist - moving to next level
+
+#ifdef LOGDATA
+                        cout << "\t\tMoving chunk " << inFileName1.str() << " to level " << level + 1 << endl;
+#endif
+
+                        FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+                        fclose(outputFile);
+
+#ifdef LOGDATA
+                        cout << "\t\tRemoving chunk " << inFileName1.str() << endl;
+#endif
+                        remove(inFileName1.str().c_str());
+
+                        element++;
+                    }
+                    if(input2){
+                        // file 2 exist - moving to next level
+
+#ifdef LOGDATA
+                        cout << "\t\tMoving chunk " << inFileName2.str() << " to level " << level + 1 << endl;
+#endif
+
+                        FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+                        fclose(outputFile);
+
+#ifdef LOGDATA
+                        cout << "\t\tRemoving chunk " << inFileName2.str() << endl;
+#endif
+                        remove(inFileName2.str().c_str());
+                        element++;
+                    }
+                }
+
+                // TODO: Add merge here
+
+
+            }
+        }
+
+        level++;
+
+        exitCondition = true;
+    }
+
 }
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -169,8 +272,6 @@ int main() {
 #ifdef LOGDATA
     initialInfo();
 #endif
-
-    stage0();
 
     stage0();
 
