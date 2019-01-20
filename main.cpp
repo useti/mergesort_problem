@@ -23,6 +23,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <vector>
 #include <algorithm>
 
@@ -54,7 +55,7 @@ uint32_t splitFile();
 
 void initialInfo();
 
-void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk);
+void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level = 0);
 
 void stage2();
 
@@ -81,6 +82,8 @@ uint32_t splitFile() {
         if(chunkElement >= ELEMENTS_PER_CHUNK){
             chunkElement = 0;
 
+            sort(currentChunk.begin(), currentChunk.end());
+
             saveChunk(chunk, currentChunk);
 
             currentChunk.clear();
@@ -91,18 +94,29 @@ uint32_t splitFile() {
 
     }
 
-    if(!currentChunk.empty())
+    if(!currentChunk.empty()) {
+        sort(currentChunk.begin(), currentChunk.end());
         saveChunk(chunk, currentChunk);
+    }
 
     fclose(inputFile);
 
     return totalElements;
 }
 
-void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk) {
-    sort(currentChunk.begin(), currentChunk.end());
+void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level) {
 
-    // TODO: add saving here
+    std::ostringstream outFileName;
+
+    outFileName << "chnk" << chunk << "lvl" << level;
+
+    FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+    for(vector<uint32_t>::iterator element = currentChunk.begin(); element!=currentChunk.end(); ++ element){
+        fwrite(&element, sizeof(uint32_t),1,outputFile);
+    }
+
+    fclose(outputFile);
 
 #ifdef LOGDATA
     cout << "\t\tChunk " << chunk << " saved (" << currentChunk.size() << " elements)" << endl;
