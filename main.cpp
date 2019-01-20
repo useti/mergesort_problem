@@ -22,11 +22,23 @@
 // Solution by Yury Tikhoglaz
 
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+// Log data
+#define LOGDATA
+
 // Memory size
 #define MEMORY_SIZE_AVAILABLE 131072
+
+#define ELEMENTS_PER_CHUNK 32000
+//#define ELEMENTS_PER_CHUNK 16000
 
 // Number of kernels
 #define KERNELS_NUM 2
@@ -39,30 +51,137 @@
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-// STAGE 0 - READ INPUT FILE AND SPLIT TO THE CHUNKS
-void stage0(){
-    std::cout << "STAGE 0 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << std::endl;
-    std::cout << std::endl;
+uint32_t splitFile();
+
+void initialInfo();
+
+void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level = 0);
+
+void stage2();
+
+void stage1();
+
+void stage0();
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// FUNCTIONS
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+uint32_t splitFile() {
+
+    uint32_t totalElements = 0, chunkElement = 0, chunk = 0, numb;
+    vector<uint32_t> currentChunk;
+
+    FILE *inputFile = fopen(INPUT_FILE, "rb");
+    while(fread(&numb, sizeof(uint32_t), 1, inputFile)) {
+
+        currentChunk.push_back(numb);
+
+        totalElements++;
+        chunkElement++;
+        if(chunkElement >= ELEMENTS_PER_CHUNK){
+            chunkElement = 0;
+
+            sort(currentChunk.begin(), currentChunk.end());
+
+            saveChunk(chunk, currentChunk);
+
+            currentChunk.clear();
+            currentChunk.shrink_to_fit();
+
+            chunk++;
+        }
+
+    }
+
+    if(!currentChunk.empty()) {
+        sort(currentChunk.begin(), currentChunk.end());
+        saveChunk(chunk, currentChunk);
+    }
+
+    fclose(inputFile);
+
+    return totalElements;
 }
 
-// STAGE 1 - MERGE CHUNKS
-void stage1(){
-    std::cout << "STAGE 1 - MERGE CHUNKS" << std::endl;
-    std::cout << std::endl;
+void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level) {
+
+    std::ostringstream outFileName;
+
+    outFileName << "chnk" << chunk << "lvl" << level;
+
+    FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+    for(vector<uint32_t>::iterator element = currentChunk.begin(); element!=currentChunk.end(); ++ element){
+        fwrite(&element, sizeof(uint32_t),1,outputFile);
+    }
+
+    fclose(outputFile);
+
+#ifdef LOGDATA
+    cout << "\t\tChunk " << chunk << " saved (" << currentChunk.size() << " elements)" << endl;
+#endif
 }
+
+void initialInfo() {
+    cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << endl;
+    cout << endl;
+    cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << " Bytes" << endl;
+    cout << "\tElements per chunk \t- " << ELEMENTS_PER_CHUNK << endl;
+    cout << "\tKernels limit \t\t- " << KERNELS_NUM << endl;
+    cout << "\tInput file name \t- " << INPUT_FILE << endl;
+    cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << endl;
+    cout << endl;
+}
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// STAGES
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+// STAGE 0 - CHECK INPUT FILE
+void stage0(){
+#ifdef LOGDATA
+    cout << "STAGE 0 - CHECK INPUT FILE" << endl;
+    cout << endl;
+#endif
+}
+
+// STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS
+void stage1(){
+#ifdef LOGDATA
+    cout << "STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
+    cout << endl;
+#endif
+
+    uint32_t n = splitFile();
+
+#ifdef LOGDATA
+    cout << "\tRead " << n << " numbers" << endl;
+    cout << std::endl;
+#endif
+}
+
+// STAGE 2 - MERGE CHUNKS
+void stage2(){
+#ifdef LOGDATA
+    cout << "STAGE 2 - MERGE CHUNKS" << endl;
+    cout << endl;
+#endif
+}
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 int main() {
-    std::cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << std::endl;
-    std::cout << std::endl;
-    std::cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << std::endl;
-    std::cout << "\tKernels limit \t\t- " << KERNELS_NUM << std::endl;
-    std::cout << "\tInput file name \t- " << INPUT_FILE << std::endl;
-    std::cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << std::endl;
-    std::cout << std::endl;
+
+#ifdef LOGDATA
+    initialInfo();
+#endif
 
     stage0();
 
     stage1();
+
+    stage2();
 
     return 0;
 }
