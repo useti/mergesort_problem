@@ -19,6 +19,24 @@
  - В качестве решения можно загрузить или один cpp-файл, или zip-архив c h- или cpp-файлами.
 */
 
+/*
+ * Подход к решению - алгоритм merge-sort
+ * В классическом алгоритме предполагается разделение исходного массива на N файлов, содержащих по одному элементу и
+ * песледовательное слияние файлов.
+ * Однако при таком подходе мы рискуем встретить ограничения со стороны файловой системы. (например в NTFS невозможно
+ * создать больше 4 миллиардов файлов в одной директории)
+ * В результате мы немного "срезаем углы" создавая сразу максимально большие файлы содержащие уже отсортированные числа
+ * используя алгоритм сортировки стандартной библиотеки. Стандартный sort в среднем имеет сложность O(N log N).
+ * Сложность многопоточного слияния файлов тоже можно оценить как O(N log N).
+ *
+ * Оверхэд по памяти для стандартной сортировки оценивается в O(log N), при последовательном слиянии - O(1).
+ * Соответственно нам необходимо оставить запас по памяти при создании первоначальных файлов.
+ *
+ * Согласно условию задачи оперативной памяти доступно только 128 мегабайт (134217728 байт - 33554432 32-битных беззнаковых
+ * числа). Учитывая оверхед необъодимый на сортировку и работу операционной системы - разумно оставить порядка ~30000000
+ * желементов в файле нулевого уровня
+ */
+
 // Solution by Yury Tikhoglaz
 
 #include <iostream>
@@ -26,6 +44,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include "MergeWorker.h"
 
 using namespace std;
 
@@ -35,13 +54,16 @@ using namespace std;
 #define LOGDATA
 
 // Memory size
-#define MEMORY_SIZE_AVAILABLE 131072
+#define MEMORY_SIZE_AVAILABLE 134217728
 
-#define ELEMENTS_PER_CHUNK 32000
-//#define ELEMENTS_PER_CHUNK 16000
+#define ELEMENTS_PER_CHUNK 30000000
+//#define ELEMENTS_PER_CHUNK 4
 
 // Number of kernels
 #define KERNELS_NUM 2
+
+// Number of workers
+#define WORKERS_NUM 4
 
 // Input file name
 #define INPUT_FILE "input"
@@ -51,13 +73,22 @@ using namespace std;
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+uint32_t _levelOne = 0;
+
+uint32_t _numberOfChunks = 0;
+
 uint32_t splitFile();
 
 void initialInfo();
 
 void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level = 0);
 
-void stage2();
+uint32_t moveNextLevel(
+        uint32_t level,
+        uint32_t element,
+        const ostringstream &inFileName,
+        const ostringstream &outFileName,
+        ifstream &input);
 
 void stage1();
 
@@ -101,6 +132,8 @@ uint32_t splitFile() {
 
     fclose(inputFile);
 
+    _numberOfChunks = chunk;
+
     return totalElements;
 }
 
@@ -112,7 +145,7 @@ void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level) {
 
     FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
 
-    for(vector<uint32_t>::iterator element = currentChunk.begin(); element!=currentChunk.end(); ++ element){
+    for(auto element = currentChunk.begin(); element!=currentChunk.end(); ++ element){
         fwrite(&element, sizeof(uint32_t),1,outputFile);
     }
 
@@ -121,6 +154,38 @@ void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level) {
 #ifdef LOGDATA
     cout << "\t\tChunk " << chunk << " saved (" << currentChunk.size() << " elements)" << endl;
 #endif
+}
+
+uint32_t moveNextLevel(
+        uint32_t level,
+        uint32_t element,
+        const ostringstream &inFileName,
+        const ostringstream &outFileName,
+        ifstream &input) {
+
+#ifdef LOGDATA
+    cout << "\t\tMoving chunk " << inFileName.str() << " to level " << level + 1 << endl;
+    cout << "\t\tOutput file "<< outFileName.str() << endl;
+
+#endif
+
+    FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+    uint32_t num;
+
+    while (input.read(reinterpret_cast<char *>(&num), sizeof(num))){
+        fwrite(&num, sizeof(num), 1, outputFile);
+    }
+
+    fclose(outputFile);
+
+#ifdef LOGDATA
+    cout << "\t\tRemoving chunk " << inFileName.str() << endl;
+#endif
+    remove(inFileName.str().c_str());
+
+    element++;
+    return element;
 }
 
 void initialInfo() {
@@ -138,35 +203,164 @@ void initialInfo() {
 // STAGES
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-// STAGE 0 - CHECK INPUT FILE
-void stage0(){
-#ifdef LOGDATA
-    cout << "STAGE 0 - CHECK INPUT FILE" << endl;
-    cout << endl;
-#endif
-}
 
 // STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS
-void stage1(){
+void stage0(){
 #ifdef LOGDATA
     cout << "STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
     cout << endl;
 #endif
 
-    uint32_t n = splitFile();
+    _levelOne = splitFile();
 
 #ifdef LOGDATA
-    cout << "\tRead " << n << " numbers" << endl;
+    cout << "\tRead " << _levelOne << " numbers" << endl;
     cout << std::endl;
 #endif
 }
 
 // STAGE 2 - MERGE CHUNKS
-void stage2(){
+void stage1(){
 #ifdef LOGDATA
     cout << "STAGE 2 - MERGE CHUNKS" << endl;
     cout << endl;
 #endif
+
+    // TODO: Refactor this code to move code below to the worker class
+
+    uint32_t level = 0;
+
+    bool exitCondition = false;
+
+    while (!exitCondition)
+    {
+
+        uint32_t element = 0;
+
+#ifdef LOGDATA
+        cout << "LEVEL " << level << endl;
+#endif
+
+        for (int i = 0; i <= _numberOfChunks; i+= WORKERS_NUM * 2) {
+            for (int j = 0; j < WORKERS_NUM; ++j) {
+
+                std::ostringstream inFileName1;
+                std::ostringstream inFileName2;
+                std::ostringstream outFileName;
+
+                inFileName1 << "chnk" <<i + j*2     << "lvl" << level;
+                inFileName2 << "chnk" <<i + j*2 + 1 << "lvl" << level;
+                outFileName << "chnk" << element << "lvl" << level + 1;
+
+                // check if input chunks exists
+
+                ifstream input1(inFileName1.str().c_str(), ios::binary);
+                ifstream input2(inFileName2.str().c_str(), ios::binary);
+
+                if (input1 && input2){
+                    // both files exist - merging
+
+#ifdef LOGDATA
+                    cout << "\t\tMerging chunk " << inFileName1.str() << " with chunk " << inFileName2.str() << endl;
+                    cout << "\t\tOutput file "<< outFileName.str() << endl;
+#endif
+
+                    FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+                    // MERGE
+
+                    // compare left and right, move less number to the output
+                    // make step on the file smaller number belongs to
+
+                    uint32_t left;
+                    uint32_t right;
+
+                    // read first elements
+
+                    input1.read(reinterpret_cast<char *>(&left), sizeof(left));
+                    input2.read(reinterpret_cast<char *>(&right), sizeof(right));
+
+                    bool mergeFinished = false;
+
+                    bool leftEnded = false;
+                    bool rightEnded = false;
+
+                    do{
+                        if(left > right){
+                            fwrite(&right, sizeof(right), 1, outputFile);
+                            rightEnded = !input2.read(reinterpret_cast<char *>(&right), sizeof(right));
+                        } else{
+                            fwrite(&left, sizeof(left), 1, outputFile);
+                            leftEnded = !input1.read(reinterpret_cast<char *>(&left), sizeof(left));
+                        }
+                        mergeFinished = leftEnded || rightEnded;
+                    }while (!mergeFinished);
+
+                    // leftovers
+
+                    if (!leftEnded){
+                        fwrite(&left, sizeof(left), 1, outputFile);
+                        while(input1.read(reinterpret_cast<char *>(&left), sizeof(left))){
+                            fwrite(&left, sizeof(left), 1, outputFile);
+                        }
+                    }
+
+                    if(!rightEnded){
+                        fwrite(&right, sizeof(right), 1, outputFile);
+                        while (input2.read(reinterpret_cast<char *>(&right), sizeof(right))){
+                            fwrite(&right, sizeof(right), 1, outputFile);
+                        }
+                    }
+
+                    fclose(outputFile);
+
+#ifdef LOGDATA
+                    cout << "\t\tRemoving chunk " << inFileName1.str() << endl;
+#endif
+                    input1.close();
+                    remove(inFileName1.str().c_str());
+
+#ifdef LOGDATA
+                    cout << "\t\tRemoving chunk " << inFileName2.str() << endl;
+#endif
+                    input2.close();
+                    remove(inFileName2.str().c_str());
+                    element++;
+                } else{
+                    if(input1){
+                        // file 1 exist - moving to next level
+
+                        element = moveNextLevel(level, element, inFileName1, outFileName, input1);
+
+                    }
+                    if(input2){
+                        // file 2 exist - moving to next level
+
+                        element = moveNextLevel(level, element, inFileName2, outFileName, input2);
+
+                    }
+                }
+
+            }
+        }
+#ifdef LOGDATA
+        cout << "Level " << level << " produced " << element << " files" << endl;
+#endif
+        level++;
+
+        // TODO: add right exit condition
+        exitCondition = element <= 1;
+    }
+
+    // move final chunk to the output
+    std::ostringstream finalFileName;
+    finalFileName << "chnk0lvl" << level;
+
+#ifdef LOGDATA
+    cout << "\r\nRENAMING " << finalFileName.str() << " to " << OUTPUT_FILE_NAME << endl;
+#endif
+
+    rename(finalFileName.str().c_str(), OUTPUT_FILE_NAME);
 }
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -181,7 +375,9 @@ int main() {
 
     stage1();
 
-    stage2();
+#ifdef LOGDATA
+    cout << "\r\n\t\t++++++++++++++ \t END \t++++++++++++++" << endl;
+#endif
 
     return 0;
 }
