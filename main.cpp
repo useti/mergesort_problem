@@ -169,6 +169,8 @@ void stage1(){
     cout << endl;
 #endif
 
+    // TODO: Refactor this code to move code below to the worker class
+
     uint32_t level = 0;
 
     bool exitCondition = false;
@@ -177,8 +179,14 @@ void stage1(){
     {
 
         uint32_t element = 0;
+
+#ifdef LOGDATA
+        cout << "LEVEL " << level << endl;
+#endif
+
         for (int i = 0; i <= _numberOfChunks; i+= WORKERS_NUM * 2) {
             for (int j = 0; j < WORKERS_NUM; ++j) {
+
                 std::ostringstream inFileName1;
                 std::ostringstream inFileName2;
                 std::ostringstream outFileName;
@@ -190,17 +198,26 @@ void stage1(){
 
                 // check if input chunks exists
 
-                ifstream input1(inFileName1.str().c_str());
-                ifstream input2(inFileName2.str().c_str());
+                ifstream input1(inFileName1.str().c_str(), ios::binary);
+                ifstream input2(inFileName2.str().c_str(), ios::binary);
 
                 if (input1 && input2){
                     // both files exist - merging
 
 #ifdef LOGDATA
                     cout << "\t\tMerging chunk " << inFileName1.str() << " with chunk " << inFileName2.str() << endl;
+                    cout << "\t\tOutput file "<< outFileName.str() << endl;
 #endif
 
                     FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+
+                    // MERGE
+
+                    uint32_t left;
+                    uint32_t right;
+
+                    // compare left and right, move less number to the output
+                    // make step on the file smaller number belongs to
 
                     fclose(outputFile);
 
@@ -220,6 +237,8 @@ void stage1(){
 
 #ifdef LOGDATA
                         cout << "\t\tMoving chunk " << inFileName1.str() << " to level " << level + 1 << endl;
+                        cout << "\t\tOutput file "<< outFileName.str() << endl;
+
 #endif
 
                         FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
@@ -238,6 +257,7 @@ void stage1(){
 
 #ifdef LOGDATA
                         cout << "\t\tMoving chunk " << inFileName2.str() << " to level " << level + 1 << endl;
+                        cout << "\t\tOutput file "<< outFileName.str() << endl;
 #endif
 
                         FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
@@ -251,8 +271,6 @@ void stage1(){
                         element++;
                     }
                 }
-
-                // TODO: Add merge here
 
 
             }
