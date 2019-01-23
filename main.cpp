@@ -51,6 +51,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <pthread.h>
 
 using namespace std;
 
@@ -79,81 +80,80 @@ using namespace std;
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-uint32_t _levelOne = 0;
+typedef struct worker_data_t{
+    const char* inFileName1;
+    const char* inFileName2;
+    const char* outFileName;
+} worker_data_t;
 
-uint32_t _numberOfChunks = 0;
+static atomic_uint32_t _element;
 
-uint32_t _element = 0;
+size_t splitFile();
 
-uint32_t splitFile();
+void saveChunk(size_t chunk, vector<uint32_t> &currentChunk, size_t level = 0);
 
-void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level = 0);
-
-uint32_t moveNextLevel(
-        uint32_t level,
+void moveNextLevel(
         const ostringstream &inFileName,
         const ostringstream &outFileName,
         ifstream &input);
 
-uint32_t merge(
+void merge(
         const ostringstream &inFileName1,
         const ostringstream &inFileName2,
         const ostringstream &outFileName,
         ifstream &input1,
         ifstream &input2);
 
-uint32_t doWork(uint32_t level, int workIndex, int threadNum);
+void doWork(
+        const ostringstream &inFileName1,
+        const ostringstream &inFileName2,
+        const ostringstream &outFileName);
 
 void initialInfo();
 
-void stage1();
+void stage1(size_t numberOfChunks);
 
-void stage0();
+size_t stage0();
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // FUNCTIONS
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-uint32_t splitFile() {
+size_t splitFile() {
 
-    uint32_t totalElements = 0, chunkElement = 0, chunk = 0, numb;
+    uint32_t numb;
+    size_t chunkElement = 0, chunk = 0;
     vector<uint32_t> currentChunk;
 
-    FILE *inputFile = fopen(INPUT_FILE, "rb");
-    while(fread(&numb, sizeof(uint32_t), 1, inputFile)) {
+    ifstream inputFile(INPUT_FILE, ios_base::binary);
 
-        currentChunk.push_back(numb);
+    if(inputFile){
+        while (inputFile.read(reinterpret_cast<char *>(&numb), sizeof(numb))){
+            currentChunk.push_back(numb);
 
-        totalElements++;
-        chunkElement++;
-        if(chunkElement >= ELEMENTS_PER_CHUNK){
-            chunkElement = 0;
+            chunkElement++;
 
-            sort(currentChunk.begin(), currentChunk.end());
-
-            saveChunk(chunk, currentChunk);
-
-            currentChunk.clear();
-            currentChunk.shrink_to_fit();
-
-            chunk++;
+            if(chunkElement >= ELEMENTS_PER_CHUNK){
+                chunkElement = 0;
+                sort(currentChunk.begin(), currentChunk.end());
+                saveChunk(chunk, currentChunk);
+                currentChunk.clear();
+                currentChunk.shrink_to_fit();
+                chunk ++;
+            }
         }
 
+        if(!currentChunk.empty()) {
+            sort(currentChunk.begin(), currentChunk.end());
+            saveChunk(chunk, currentChunk);
+        }
+
+        inputFile.close();
     }
-
-    if(!currentChunk.empty()) {
-        sort(currentChunk.begin(), currentChunk.end());
-        saveChunk(chunk, currentChunk);
-    }
-
-    fclose(inputFile);
-
-    _numberOfChunks = chunk;
-
-    return totalElements;
+    return chunk;
 }
 
-void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level) {
+void saveChunk(size_t chunk, vector<uint32_t> &currentChunk, size_t level) {
 
     std::ostringstream outFileName;
 
@@ -172,28 +172,27 @@ void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level) {
 #endif
 }
 
-uint32_t moveNextLevel(
-        uint32_t level,
+void moveNextLevel(
         const ostringstream &inFileName,
         const ostringstream &outFileName,
         ifstream &input) {
 
 #ifdef LOGDATA
-    cout << "\t\tMoving chunk " << inFileName.str() << " to level " << level + 1 << endl;
-    cout << "\t\tOutput file "<< outFileName.str() << endl;
+    cout << "\t\tMoving chunk " << inFileName.str() << " to " << outFileName.str() << endl;
 #endif
 
     rename(inFileName.str().c_str(),outFileName.str().c_str());
 
     _element++;
-    return _element;
 }
 
-uint32_t merge(
+void merge(
         const ostringstream &inFileName1,
         const ostringstream &inFileName2,
         const ostringstream &outFileName,
-        ifstream &input1, ifstream &input2) {
+        ifstream &input1,
+        ifstream &input2
+        ) {
 #ifdef LOGDATA
     cout << "\t\tMerging chunk " << inFileName1.str() << " with chunk " << inFileName2.str() << endl;
     cout << "\t\tOutput file "<< outFileName.str() << endl;
@@ -260,17 +259,13 @@ uint32_t merge(
     input2.close();
     remove(inFileName2.str().c_str());
     _element++;
-    return _element;
 }
 
-uint32_t doWork(uint32_t level, int workIndex, int threadNum) {
-    ostringstream inFileName1;
-    ostringstream inFileName2;
-    ostringstream outFileName;
-
-    inFileName1 << "chnk" <<workIndex + threadNum*2     << "lvl" << level;
-    inFileName2 << "chnk" <<workIndex + threadNum*2 + 1 << "lvl" << level;
-    outFileName << "chnk" << _element << "lvl" << level + 1;
+void doWork(
+        const ostringstream &inFileName1,
+        const ostringstream &inFileName2,
+        const ostringstream &outFileName
+        ) {
 
     // check if input chunks exists
 
@@ -280,23 +275,22 @@ uint32_t doWork(uint32_t level, int workIndex, int threadNum) {
     if (input1 && input2){
         // both files exist - merging
 
-        _element = merge(inFileName1, inFileName2, outFileName, input1, input2);
+        merge(inFileName1, inFileName2, outFileName, input1, input2);
 
     } else{
         if(input1){
             // file 1 exist - moving to next level
 
-            _element = moveNextLevel(level, inFileName1, outFileName, input1);
+            moveNextLevel(inFileName1, outFileName, input1);
 
         }
         if(input2){
             // file 2 exist - moving to next level
 
-            _element = moveNextLevel(level, inFileName2, outFileName, input2);
+            moveNextLevel(inFileName2, outFileName, input2);
 
         }
     }
-    return _element;
 }
 
 void initialInfo() {
@@ -305,6 +299,7 @@ void initialInfo() {
     cout << "\tMemory limit \t\t- " << MEMORY_SIZE_AVAILABLE << " Bytes" << endl;
     cout << "\tElements per chunk \t- " << ELEMENTS_PER_CHUNK << endl;
     cout << "\tKernels limit \t\t- " << KERNELS_NUM << endl;
+    cout << "\tWorkers number \t\t- " << WORKERS_NUM << endl;
     cout << "\tInput file name \t- " << INPUT_FILE << endl;
     cout << "\tOutput file name \t- " << OUTPUT_FILE_NAME << endl;
     cout << endl;
@@ -316,49 +311,51 @@ void initialInfo() {
 
 
 // STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS
-void stage0(){
+size_t stage0(){
 #ifdef LOGDATA
-    cout << "STAGE 1 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
+    cout << "STAGE 0 - READ INPUT FILE AND SPLIT TO THE CHUNKS" << endl;
     cout << endl;
 #endif
 
-    _levelOne = splitFile();
-
-#ifdef LOGDATA
-    cout << "\tRead " << _levelOne << " numbers" << endl;
-    cout << std::endl;
-#endif
+    return splitFile();
 }
 
 // STAGE 2 - MERGE CHUNKS
-void stage1(){
+void stage1(size_t numberOfChunks){
 #ifdef LOGDATA
-    cout << "STAGE 2 - MERGE CHUNKS" << endl;
+    cout << "STAGE 1 - MERGE CHUNKS" << endl;
     cout << endl;
 #endif
 
     // TODO: Refactor this code to move code below to the worker class
 
-    uint32_t level = 0;
+    size_t level = 0;
 
     bool exitCondition = false;
 
     while (!exitCondition)
     {
-
         _element = 0;
 
 #ifdef LOGDATA
         cout << "LEVEL " << level << endl;
 #endif
 
-        for (int workIndex = 0; workIndex <= _numberOfChunks; workIndex+= WORKERS_NUM * 2) {
-            for (int threadNum = 0; threadNum < WORKERS_NUM; ++threadNum) {
+        for (size_t workIndex = 0; workIndex <= numberOfChunks; workIndex+= WORKERS_NUM * 2) {
+            for (size_t threadNum = 0; threadNum < WORKERS_NUM; ++threadNum) {
 #ifdef LOGDATA
                 cout << "\t START THREAD " << threadNum << endl;
 #endif
-                _element = doWork(level, workIndex, threadNum);
 
+                ostringstream inFileName1;
+                ostringstream inFileName2;
+                ostringstream outFileName;
+
+                inFileName1 << "chnk" <<workIndex + threadNum*2     << "lvl" << level;
+                inFileName2 << "chnk" <<workIndex + threadNum*2 + 1 << "lvl" << level;
+                outFileName << "chnk" << _element << "lvl" << level + 1;
+
+                doWork(inFileName1, inFileName2, outFileName);
             }
         }
 #ifdef LOGDATA
@@ -368,7 +365,7 @@ void stage1(){
         level++;
 
         exitCondition = _element <= 1;
-        _numberOfChunks = _element;
+        numberOfChunks = _element;
     }
 
     // move final chunk to the output
@@ -390,9 +387,7 @@ int main() {
     initialInfo();
 #endif
 
-    stage0();
-
-    stage1();
+    stage1(stage0());
 
 #ifdef LOGDATA
     cout << "\r\n\t\t++++++++++++++ \t END \t++++++++++++++" << endl;
