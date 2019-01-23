@@ -83,26 +83,26 @@ uint32_t _levelOne = 0;
 
 uint32_t _numberOfChunks = 0;
 
+uint32_t _element = 0;
+
 uint32_t splitFile();
 
 void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level = 0);
 
 uint32_t moveNextLevel(
         uint32_t level,
-        uint32_t element,
         const ostringstream &inFileName,
         const ostringstream &outFileName,
         ifstream &input);
 
 uint32_t merge(
-        uint32_t element,
         const ostringstream &inFileName1,
         const ostringstream &inFileName2,
         const ostringstream &outFileName,
         ifstream &input1,
         ifstream &input2);
 
-uint32_t doWork(uint32_t level, uint32_t element, int i, int j);
+uint32_t doWork(uint32_t level, int workIndex, int threadNum);
 
 void initialInfo();
 
@@ -174,7 +174,6 @@ void saveChunk(uint32_t chunk, vector<uint32_t> &currentChunk, uint32_t level) {
 
 uint32_t moveNextLevel(
         uint32_t level,
-        uint32_t element,
         const ostringstream &inFileName,
         const ostringstream &outFileName,
         ifstream &input) {
@@ -186,12 +185,11 @@ uint32_t moveNextLevel(
 
     rename(inFileName.str().c_str(),outFileName.str().c_str());
 
-    element++;
-    return element;
+    _element++;
+    return _element;
 }
 
 uint32_t merge(
-        uint32_t element,
         const ostringstream &inFileName1,
         const ostringstream &inFileName2,
         const ostringstream &outFileName,
@@ -261,18 +259,18 @@ uint32_t merge(
 #endif
     input2.close();
     remove(inFileName2.str().c_str());
-    element++;
-    return element;
+    _element++;
+    return _element;
 }
 
-uint32_t doWork(uint32_t level, uint32_t element, int i, int j) {
+uint32_t doWork(uint32_t level, int workIndex, int threadNum) {
     ostringstream inFileName1;
     ostringstream inFileName2;
     ostringstream outFileName;
 
-    inFileName1 << "chnk" <<i + j*2     << "lvl" << level;
-    inFileName2 << "chnk" <<i + j*2 + 1 << "lvl" << level;
-    outFileName << "chnk" << element << "lvl" << level + 1;
+    inFileName1 << "chnk" <<workIndex + threadNum*2     << "lvl" << level;
+    inFileName2 << "chnk" <<workIndex + threadNum*2 + 1 << "lvl" << level;
+    outFileName << "chnk" << _element << "lvl" << level + 1;
 
     // check if input chunks exists
 
@@ -282,23 +280,23 @@ uint32_t doWork(uint32_t level, uint32_t element, int i, int j) {
     if (input1 && input2){
         // both files exist - merging
 
-        element = merge(element, inFileName1, inFileName2, outFileName, input1, input2);
+        _element = merge(inFileName1, inFileName2, outFileName, input1, input2);
 
     } else{
         if(input1){
             // file 1 exist - moving to next level
 
-            element = moveNextLevel(level, element, inFileName1, outFileName, input1);
+            _element = moveNextLevel(level, inFileName1, outFileName, input1);
 
         }
         if(input2){
             // file 2 exist - moving to next level
 
-            element = moveNextLevel(level, element, inFileName2, outFileName, input2);
+            _element = moveNextLevel(level, inFileName2, outFileName, input2);
 
         }
     }
-    return element;
+    return _element;
 }
 
 void initialInfo() {
@@ -348,26 +346,29 @@ void stage1(){
     while (!exitCondition)
     {
 
-        uint32_t element = 0;
+        _element = 0;
 
 #ifdef LOGDATA
         cout << "LEVEL " << level << endl;
 #endif
 
-        for (int i = 0; i <= _numberOfChunks; i+= WORKERS_NUM * 2) {
-            for (int j = 0; j < WORKERS_NUM; ++j) {
-
-                element = doWork(level, element, i, j);
+        for (int workIndex = 0; workIndex <= _numberOfChunks; workIndex+= WORKERS_NUM * 2) {
+            for (int threadNum = 0; threadNum < WORKERS_NUM; ++threadNum) {
+#ifdef LOGDATA
+                cout << "\t START THREAD " << threadNum << endl;
+#endif
+                _element = doWork(level, workIndex, threadNum);
 
             }
         }
 #ifdef LOGDATA
-        cout << "Level " << level << " produced " << element << " files" << endl;
+        cout << "Level " << level << " produced " << _element << " files" << endl;
         cout << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl << endl;
 #endif
         level++;
 
-        exitCondition = element <= 1;
+        exitCondition = _element <= 1;
+        _numberOfChunks = _element;
     }
 
     // move final chunk to the output
