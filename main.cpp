@@ -52,6 +52,7 @@
 #include <vector>
 #include <algorithm>
 #include <pthread.h>
+#include <atomic>
 
 using namespace std;
 
@@ -86,7 +87,7 @@ typedef struct worker_data_t{
     const char* outFileName;
 } worker_data_t;
 
-static atomic_uint32_t _element;
+static atomic<uint32_t> _element;
 
 size_t splitFile();
 
