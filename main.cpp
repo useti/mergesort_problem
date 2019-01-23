@@ -57,7 +57,7 @@ using namespace std;
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 // Log data - disabled due performance reasons
-//#define LOGDATA
+#define LOGDATA
 
 // Memory size
 #define MEMORY_SIZE_AVAILABLE 134217728
@@ -101,6 +101,8 @@ uint32_t merge(
         const ostringstream &outFileName,
         ifstream &input1,
         ifstream &input2);
+
+uint32_t doWork(uint32_t level, uint32_t element, int i, int j);
 
 void initialInfo();
 
@@ -263,6 +265,42 @@ uint32_t merge(
     return element;
 }
 
+uint32_t doWork(uint32_t level, uint32_t element, int i, int j) {
+    ostringstream inFileName1;
+    ostringstream inFileName2;
+    ostringstream outFileName;
+
+    inFileName1 << "chnk" <<i + j*2     << "lvl" << level;
+    inFileName2 << "chnk" <<i + j*2 + 1 << "lvl" << level;
+    outFileName << "chnk" << element << "lvl" << level + 1;
+
+    // check if input chunks exists
+
+    ifstream input1(inFileName1.str().c_str(), ios_base::binary);
+    ifstream input2(inFileName2.str().c_str(), ios_base::binary);
+
+    if (input1 && input2){
+        // both files exist - merging
+
+        element = merge(element, inFileName1, inFileName2, outFileName, input1, input2);
+
+    } else{
+        if(input1){
+            // file 1 exist - moving to next level
+
+            element = moveNextLevel(level, element, inFileName1, outFileName, input1);
+
+        }
+        if(input2){
+            // file 2 exist - moving to next level
+
+            element = moveNextLevel(level, element, inFileName2, outFileName, input2);
+
+        }
+    }
+    return element;
+}
+
 void initialInfo() {
     cout << "PROBLEM 1 SOLUTION by Yury Tikhoglaz" << endl;
     cout << endl;
@@ -319,38 +357,7 @@ void stage1(){
         for (int i = 0; i <= _numberOfChunks; i+= WORKERS_NUM * 2) {
             for (int j = 0; j < WORKERS_NUM; ++j) {
 
-                std::ostringstream inFileName1;
-                std::ostringstream inFileName2;
-                std::ostringstream outFileName;
-
-                inFileName1 << "chnk" <<i + j*2     << "lvl" << level;
-                inFileName2 << "chnk" <<i + j*2 + 1 << "lvl" << level;
-                outFileName << "chnk" << element << "lvl" << level + 1;
-
-                // check if input chunks exists
-
-                ifstream input1(inFileName1.str().c_str(), ios::binary);
-                ifstream input2(inFileName2.str().c_str(), ios::binary);
-
-                if (input1 && input2){
-                    // both files exist - merging
-
-                    element = merge(element, inFileName1, inFileName2, outFileName, input1, input2);
-
-                } else{
-                    if(input1){
-                        // file 1 exist - moving to next level
-
-                        element = moveNextLevel(level, element, inFileName1, outFileName, input1);
-
-                    }
-                    if(input2){
-                        // file 2 exist - moving to next level
-
-                        element = moveNextLevel(level, element, inFileName2, outFileName, input2);
-
-                    }
-                }
+                element = doWork(level, element, i, j);
 
             }
         }
