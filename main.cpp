@@ -44,6 +44,10 @@
  *
  * Алгоритм можно и нужно улучшать - в частности вынести сделать stage1 многопоточным и вынести воркеры в отдельный
  * класс. Но по причине нехватки времени это не было сделано. ¯\_(ツ)_/¯
+ *
+ * 2019-01-24 - все готово к выделению многопоточной склейки. Экспериментальным путем установлено, что 30000000
+ * элементов на файл слишком много - максимум ~10000000, а по хорошему можно было бы и вдвое меньше.
+ * Нужно избавиться от FILE* и заменить везде на fstream. Считывание на начальном этапе делать с буферизацией.
  */
 
 #include <iostream>
@@ -64,8 +68,9 @@ using namespace std;
 // Memory size
 #define MEMORY_SIZE_AVAILABLE 134217728
 
-#define ELEMENTS_PER_CHUNK 30000000
+//#define ELEMENTS_PER_CHUNK 30000000
 //#define ELEMENTS_PER_CHUNK 10000000
+#define ELEMENTS_PER_CHUNK 5000000
 
 // Number of kernels
 #define KERNELS_NUM 2
@@ -126,6 +131,8 @@ size_t splitFile() {
     size_t chunkElement = 0, chunk = 0;
     vector<uint32_t> currentChunk;
 
+    // TODO: Read with buffer in order to reduce number of reads
+
     ifstream inputFile(INPUT_FILE, ios_base::binary);
 
     if(inputFile){
@@ -159,6 +166,8 @@ void saveChunk(size_t chunk, vector<uint32_t> &currentChunk, size_t level) {
     std::ostringstream outFileName;
 
     outFileName << "chnk" << chunk << "lvl" << level;
+
+    // TODO: Replace with the ofstream
 
     FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
 
