@@ -62,6 +62,11 @@ using namespace std;
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+#define ERROR_CREATE_THREAD -11
+#define ERROR_JOIN_THREAD   -12
+#define BAD_MESSAGE         -13
+#define SUCCESS               0
+
 // Log data - disabled due performance reasons
 #define LOGDATA
 
@@ -87,11 +92,12 @@ using namespace std;
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 typedef struct worker_data_t{
-    const char* inFileName1;
-    const char* inFileName2;
-    const char* outFileName;
+    string inFileName1;
+    string inFileName2;
+    string outFileName;
 } worker_data_t;
 
+std::mutex mx;
 static atomic<uint32_t> _element;
 
 size_t splitFile();
@@ -99,21 +105,18 @@ size_t splitFile();
 void saveChunk(size_t chunk, vector<uint32_t> &currentChunk, size_t level = 0);
 
 void moveNextLevel(
-        const ostringstream &inFileName,
-        const ostringstream &outFileName,
+        const char* inFileName,
+        const char* outFileName,
         ifstream &input);
 
 void merge(
-        const ostringstream &inFileName1,
-        const ostringstream &inFileName2,
-        const ostringstream &outFileName,
+        const char* inFileName1,
+        const char* inFileName2,
+        const char* outFileName,
         ifstream &input1,
         ifstream &input2);
 
-void doWork(
-        const ostringstream &inFileName1,
-        const ostringstream &inFileName2,
-        const ostringstream &outFileName);
+void* doWork(void *args);
 
 void initialInfo();
 
@@ -183,32 +186,33 @@ void saveChunk(size_t chunk, vector<uint32_t> &currentChunk, size_t level) {
 }
 
 void moveNextLevel(
-        const ostringstream &inFileName,
-        const ostringstream &outFileName,
+        const char* inFileName,
+        const char* outFileName,
         ifstream &input) {
 
 #ifdef LOGDATA
-    cout << "\t\tMoving chunk " << inFileName.str() << " to " << outFileName.str() << endl;
+    cout << "\t\tMoving chunk " << inFileName << " to " << outFileName << endl;
 #endif
 
-    rename(inFileName.str().c_str(),outFileName.str().c_str());
+    rename(inFileName, outFileName);
 
+    std::lock_guard<std::mutex> lock{mx};
     _element++;
 }
 
 void merge(
-        const ostringstream &inFileName1,
-        const ostringstream &inFileName2,
-        const ostringstream &outFileName,
+        const char* inFileName1,
+        const char* inFileName2,
+        const char* outFileName,
         ifstream &input1,
         ifstream &input2
         ) {
 #ifdef LOGDATA
-    cout << "\t\tMerging chunk " << inFileName1.str() << " with chunk " << inFileName2.str() << endl;
-    cout << "\t\tOutput file "<< outFileName.str() << endl;
+    cout << "\t\tMerging chunk " << inFileName1 << " with chunk " << inFileName2 << endl;
+    cout << "\t\tOutput file "<< outFileName << endl;
 #endif
 
-    FILE *outputFile = fopen(outFileName.str().c_str(), "wb");
+    FILE *outputFile = fopen(outFileName, "wb");
 
     // MERGE
 
@@ -258,49 +262,50 @@ void merge(
     fclose(outputFile);
 
 #ifdef LOGDATA
-    cout << "\t\tRemoving chunk " << inFileName1.str() << endl;
+    cout << "\t\tRemoving chunk " << inFileName1 << endl;
 #endif
     input1.close();
-    remove(inFileName1.str().c_str());
+    remove(inFileName1);
 
 #ifdef LOGDATA
-    cout << "\t\tRemoving chunk " << inFileName2.str() << endl;
+    cout << "\t\tRemoving chunk " << inFileName2 << endl;
 #endif
     input2.close();
-    remove(inFileName2.str().c_str());
+    remove(inFileName2);
+    std::lock_guard<std::mutex> lock{mx};
     _element++;
 }
 
-void doWork(
-        const ostringstream &inFileName1,
-        const ostringstream &inFileName2,
-        const ostringstream &outFileName
-        ) {
+void* doWork(void *args) {
 
     // check if input chunks exists
 
-    ifstream input1(inFileName1.str().c_str(), ios_base::binary);
-    ifstream input2(inFileName2.str().c_str(), ios_base::binary);
+    worker_data_t* data = reinterpret_cast<worker_data_t*>(args);
+
+    ifstream input1(data->inFileName1, ios_base::binary);
+    ifstream input2(data->inFileName2, ios_base::binary);
 
     if (input1 && input2){
         // both files exist - merging
 
-        merge(inFileName1, inFileName2, outFileName, input1, input2);
+        merge(data->inFileName1.c_str(), data->inFileName2.c_str(), data->outFileName.c_str(), input1, input2);
 
     } else{
         if(input1){
             // file 1 exist - moving to next level
 
-            moveNextLevel(inFileName1, outFileName, input1);
+            moveNextLevel(data->inFileName1.c_str(), data->outFileName.c_str(), input1);
 
         }
         if(input2){
             // file 2 exist - moving to next level
 
-            moveNextLevel(inFileName2, outFileName, input2);
+            moveNextLevel(data->inFileName2.c_str(), data->outFileName.c_str(), input2);
 
         }
     }
+
+    return SUCCESS;
 }
 
 void initialInfo() {
@@ -351,31 +356,47 @@ void stage1(size_t numberOfChunks){
         cout << "LEVEL " << level << endl;
 #endif
 
+        size_t outNum = 0;
         for (size_t workIndex = 0; workIndex <= numberOfChunks; workIndex+= WORKERS_NUM * 2) {
+            pthread_t threads[WORKERS_NUM];
+            worker_data_t params[WORKERS_NUM];
+
+            for (size_t threadNum = 0; threadNum < WORKERS_NUM; ++threadNum) {
+                stringstream inFileName1;
+                stringstream inFileName2;
+                stringstream outFileName;
+
+                inFileName1 << "chnk" <<workIndex + threadNum*2     << "lvl" << level;
+                inFileName2 << "chnk" <<workIndex + threadNum*2 + 1 << "lvl" << level;
+                outFileName << "chnk" << outNum << "lvl" << level + 1;
+
+                params[threadNum].inFileName1 = inFileName1.str();
+                params[threadNum].inFileName2 = inFileName2.str();
+                params[threadNum].outFileName = outFileName.str();
+
+                outNum++;
+            }
+
             for (size_t threadNum = 0; threadNum < WORKERS_NUM; ++threadNum) {
 #ifdef LOGDATA
                 cout << "\t START THREAD " << threadNum << endl;
 #endif
 
-                ostringstream inFileName1;
-                ostringstream inFileName2;
-                ostringstream outFileName;
+                pthread_create(&threads[threadNum], nullptr, doWork, (void *) &params[threadNum]);
+            }
 
-                inFileName1 << "chnk" <<workIndex + threadNum*2     << "lvl" << level;
-                inFileName2 << "chnk" <<workIndex + threadNum*2 + 1 << "lvl" << level;
-                outFileName << "chnk" << _element << "lvl" << level + 1;
-
-                doWork(inFileName1, inFileName2, outFileName);
+            for (size_t threadNum = 0; threadNum < WORKERS_NUM; ++threadNum) {
+                pthread_join(threads[threadNum], nullptr);
             }
         }
 #ifdef LOGDATA
-        cout << "Level " << level << " produced " << _element << " files" << endl;
+        cout << "Level " << level << " produced " << _element.load() << " files" << endl;
         cout << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl << endl;
 #endif
         level++;
 
-        exitCondition = _element <= 1;
-        numberOfChunks = _element;
+        exitCondition = _element.load() <= 1;
+        numberOfChunks = _element.load();
     }
 
     // move final chunk to the output
