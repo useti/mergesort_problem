@@ -48,6 +48,8 @@
  * 2019-01-24 - все готово к выделению многопоточной склейки. Экспериментальным путем установлено, что 30000000
  * элементов на файл слишком много - максимум ~10000000, а по хорошему можно было бы и вдвое меньше.
  * Нужно избавиться от FILE* и заменить везде на fstream. Считывание на начальном этапе делать с буферизацией.
+ *
+ * 2019-01-31 - Многопоточная версия. Падает на целевой машине в 4 потока.
  */
 
 #include <iostream>
@@ -97,7 +99,6 @@ typedef struct worker_data_t{
     string outFileName;
 } worker_data_t;
 
-std::mutex mx;
 static atomic<uint32_t> _element;
 
 size_t splitFile();
@@ -196,7 +197,6 @@ void moveNextLevel(
 
     rename(inFileName, outFileName);
 
-    std::lock_guard<std::mutex> lock{mx};
     _element++;
 }
 
@@ -272,7 +272,7 @@ void merge(
 #endif
     input2.close();
     remove(inFileName2);
-    std::lock_guard<std::mutex> lock{mx};
+
     _element++;
 }
 
